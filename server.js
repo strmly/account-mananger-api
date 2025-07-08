@@ -46,7 +46,11 @@ const redisClient = redis.createClient({
   host: 'redis-11451.c9.us-east-1-4.ec2.redns.redis-cloud.com',
   port: 11451,
   username: 'default',
-  password: 'rmNYR7f7baKHoDDQZfs0XuGLSBli1sxd'
+  password: 'rmNYR7f7baKHoDDQZfs0XuGLSBli1sxd',
+  db: 0,
+  tls: {  
+    rejectUnauthorized: false
+  }
 });
 
 // Connect to Redis
@@ -288,8 +292,16 @@ app.get('/api/auth/verify', verifySession, async (req, res) => {
 // Account management endpoints
 app.get('/api/accounts', verifySession, async (req, res) => {
   try {
+    const keys = await redisClient.keys('*');
+    console.log(keys);
+
+    if (keys.length === 0) {
+      
+      return res.json([]);
+    }
     const accountsData = await redisClient.get('mt5_accounts');
     const accounts = accountsData ? JSON.parse(accountsData) : [];
+    console.log(accounts)
     res.json(accounts);
   } catch (error) {
     console.error('Get accounts error:', error);
