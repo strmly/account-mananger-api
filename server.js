@@ -42,15 +42,16 @@ app.use(cors({
 app.use(express.json());
 
 // Redis Cloud connection
+// Alternative Redis Cloud connection
 const redisClient = redis.createClient({
-  host: 'redis-11451.c9.us-east-1-4.ec2.redns.redis-cloud.com',
-  port: 11451,
+  socket: {
+    host: 'redis-11451.c9.us-east-1-4.ec2.redns.redis-cloud.com',
+    port: 11451,
+    
+  },
   username: 'default',
   password: 'rmNYR7f7baKHoDDQZfs0XuGLSBli1sxd',
-  db: 0,
-  tls: {  
-    rejectUnauthorized: false
-  }
+  database: 0
 });
 
 // Connect to Redis
@@ -339,7 +340,7 @@ app.post('/api/accounts', verifySession, verifyManagerOrAdmin, async (req, res) 
       password, // In production, consider encryption
       server,
       account_type,
-      status: 'inactive',
+      status: 'active',
       balance: 0,
       equity: 0,
       created_at: new Date().toISOString(),
