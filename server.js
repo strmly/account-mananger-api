@@ -82,6 +82,17 @@ const generateSessionId = () => {
   return uuidv4();
 };
 
+// Validation functions
+const validateAccountType = (accountType) => {
+  const validTypes = ['FTMO', 'Forex', 'Nasdaq', 'S&P500', 'XM'];
+  return validTypes.includes(accountType);
+};
+
+const validatePhase = (phase) => {
+  const validPhases = ['challenge', 'verification', 'account'];
+  return validPhases.includes(phase);
+};
+
 // Middleware to verify session
 const verifySession = async (req, res, next) => {
   try {
@@ -297,7 +308,6 @@ app.get('/api/accounts', verifySession, async (req, res) => {
     console.log(keys);
 
     if (keys.length === 0) {
-      
       return res.json([]);
     }
     const accountsData = await redisClient.get('mt5_accounts');
@@ -312,16 +322,22 @@ app.get('/api/accounts', verifySession, async (req, res) => {
 
 app.post('/api/accounts', verifySession, verifyManagerOrAdmin, async (req, res) => {
   try {
-    const { account_number, password, server, account_type } = req.body;
+    const { account_number, password, server, account_type, phase } = req.body;
 
     // Validate required fields
     if (!account_number || !password || !server || !account_type) {
-      return res.status(400).json({ error: 'All fields are required' });
+      return res.status(400).json({ error: 'Account number, password, server, and account type are required' });
     }
 
     // Validate account type
-    if (!['FTMO', 'Forex', 'Nasdaq Account', 'S&P500 Account', 'XM Account'].includes(account_type)) {
-      return res.status(400).json({ error: 'Invalid account type' });
+    if (!validateAccountType(account_type)) {
+      return res.status(400).json({ error: 'Invalid account type. Must be one of: FTMO, Forex, Nasdaq, S&P500, XM' });
+    }
+
+    // Validate phase (optional, defaults to 'challenge')
+    const accountPhase = phase || 'challenge';
+    if (!validatePhase(accountPhase)) {
+      return res.status(400).json({ error: 'Invalid phase. Must be one of: challenge, verification, account' });
     }
 
     // Get existing accounts
@@ -340,6 +356,7 @@ app.post('/api/accounts', verifySession, verifyManagerOrAdmin, async (req, res) 
       password, // In production, consider encryption
       server,
       account_type,
+      phase: accountPhase,
       status: 'active',
       balance: 0,
       equity: 0,
@@ -364,7 +381,7 @@ app.post('/api/accounts', verifySession, verifyManagerOrAdmin, async (req, res) 
 app.put('/api/accounts/:accountId', verifySession, verifyManagerOrAdmin, async (req, res) => {
   try {
     const { accountId } = req.params;
-    const { account_number, password, server, account_type } = req.body;
+    const { account_number, password, server, account_type, phase } = req.body;
 
     // Get existing accounts
     const accountsData = await redisClient.get('mt5_accounts');
@@ -377,8 +394,18 @@ app.put('/api/accounts/:accountId', verifySession, verifyManagerOrAdmin, async (
     }
 
     // Validate account type if provided
-    if (account_type && !['FTMO', 'Forex', 'Nasdaq Account', 'S&P500 Account', 'XM Account'].includes(account_type)) {
-      return res.status(400).json({ error: 'Invalid account type' });
+    if (account_type && !validateAccountType(account_type)) {
+      return res.status(400).json({ error: 'Invalid account type. Must be one of: FTMO, Forex, Nasdaq, S&P500, XM' });
+    }
+
+    // Validate phase if provided
+    if (phase && !validatePhase(phase)) {
+      return res.status(400).json({ error: 'Invalid phase. Must be one of: challenge, verification, account' });
+    }
+
+    // Check if account number already exists (excluding current account)
+    if (account_number && accounts.some(acc => acc.account_number === account_number && acc.id !== accountId)) {
+      return res.status(400).json({ error: 'Account number already exists' });
     }
 
     // Update account fields
@@ -387,6 +414,7 @@ app.put('/api/accounts/:accountId', verifySession, verifyManagerOrAdmin, async (
     if (password) account.password = password;
     if (server) account.server = server;
     if (account_type) account.account_type = account_type;
+    if (phase) account.phase = phase;
 
     account.updated_at = new Date().toISOString();
     account.updated_by = req.user.username;
@@ -510,7 +538,7 @@ app.post('/api/users', verifySession, verifyAdmin, async (req, res) => {
 app.put('/api/users/:userId', verifySession, verifyAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
-    const { username, email, firstName, lastName, role, status } = req.body;
+    const { username, email, firstName, lastName, role, status, password } = req.body;
 
     // Get existing users
     const usersData = await redisClient.get('platform_users');
@@ -532,6 +560,16 @@ app.put('/api/users/:userId', verifySession, verifyAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Invalid role' });
     }
 
+    // Check if username already exists (excluding current user)
+    if (username && users.some(u => u.username === username && u.id !== userId)) {
+      return res.status(400).json({ error: 'Username already exists' });
+    }
+
+    // Check if email already exists (excluding current user)
+    if (email && users.some(u => u.email === email && u.id !== userId)) {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
+
     // Update user fields
     const user = users[userIndex];
     if (username) user.username = username;
@@ -540,6 +578,11 @@ app.put('/api/users/:userId', verifySession, verifyAdmin, async (req, res) => {
     if (lastName) user.lastName = lastName;
     if (role) user.role = role;
     if (status) user.status = status;
+    
+    // Update password if provided
+    if (password) {
+      user.password = await hashPassword(password);
+    }
 
     user.updated_at = new Date().toISOString();
 
@@ -655,6 +698,7 @@ if (process.env.NODE_ENV !== 'test') {
         console.log(`🚀 Server running on port ${PORT}`);
         console.log(`📊 API endpoints available at http://localhost:${PORT}/api`);
         console.log(`🔧 Health check: http://localhost:${PORT}/api/health`);
+        console.log(`✨ Phase field support enabled for account management`);
       });
     } catch (error) {
       console.error('❌ Failed to start server:', error);
