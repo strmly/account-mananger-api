@@ -36,7 +36,7 @@ app.use((err, req, res, next) => {
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:5173'], // Add your frontend URLs
+  origin: ['https://account-mananger-ui-fuag.vercel.app', 'http://localhost:5173'], // Add your frontend URLs
   credentials: true
 }));
 app.use(express.json());
@@ -84,7 +84,7 @@ const generateSessionId = () => {
 
 // Validation functions
 const validateAccountType = (accountType) => {
-  const validTypes = ['FTMO', 'Forex', 'Nasdaq', 'S&P500', 'XM'];
+  const validTypes = ['FTMO', 'Forex', 'Nasdaq', 'S&P500', 'XM','XM-GOLD','XM-NASDAQ'];
   return validTypes.includes(accountType);
 };
 
@@ -331,7 +331,7 @@ app.post('/api/accounts', verifySession, verifyManagerOrAdmin, async (req, res) 
 
     // Validate account type
     if (!validateAccountType(account_type)) {
-      return res.status(400).json({ error: 'Invalid account type. Must be one of: FTMO, Forex, Nasdaq, S&P500, XM' });
+      return res.status(400).json({ error: 'Invalid account type. Must be one of: FTMO, Forex, Nasdaq, S&P500, XM','XM-GOLD','XM-NASDAQ' });
     }
 
     // Validate phase (optional, defaults to 'challenge')
@@ -395,7 +395,7 @@ app.put('/api/accounts/:accountId', verifySession, verifyManagerOrAdmin, async (
 
     // Validate account type if provided
     if (account_type && !validateAccountType(account_type)) {
-      return res.status(400).json({ error: 'Invalid account type. Must be one of: FTMO, Forex, Nasdaq, S&P500, XM' });
+      return res.status(400).json({ error: 'Invalid account type. Must be one of: FTMO, Forex, Nasdaq, S&P500, XM','XM-GOLD','XM-NASDAQ'});
     }
 
     // Validate phase if provided
