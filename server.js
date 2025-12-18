@@ -89,7 +89,7 @@ const validateProvider = (provider) => {
 };
 
 const validateAccountType = (accountType) => {
-  const validTypes = ['challenge', 'verification', 'account'];
+  const validTypes = ['challenge', 'verification', 'live'];
   return validTypes.includes(accountType.toLowerCase());
 };
 
