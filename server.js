@@ -83,14 +83,14 @@ const generateSessionId = () => {
 };
 
 // Validation functions
-const validateAccountType = (accountType) => {
-  const validTypes = ['FTMO', 'Forex', 'Nasdaq', 'S&P500', 'XM','XM-GOLD','XM-NASDAQ'];
-  return validTypes.includes(accountType);
+const validateProvider = (provider) => {
+  const validProviders = ['ftmo', 'forex', 'xm'];
+  return validProviders.includes(provider.toLowerCase());
 };
 
-const validatePhase = (phase) => {
-  const validPhases = ['challenge', 'verification', 'account'];
-  return validPhases.includes(phase);
+const validateAccountType = (accountType) => {
+  const validTypes = ['challenge', 'verification', 'account'];
+  return validTypes.includes(accountType.toLowerCase());
 };
 
 // Middleware to verify session
@@ -322,22 +322,28 @@ app.get('/api/accounts', verifySession, async (req, res) => {
 
 app.post('/api/accounts', verifySession, verifyManagerOrAdmin, async (req, res) => {
   try {
-    const { account_number, password, server, account_type, phase } = req.body;
+    const { account_number, password, server, base_balance, account_type, provider } = req.body;
 
     // Validate required fields
-    if (!account_number || !password || !server || !account_type) {
-      return res.status(400).json({ error: 'Account number, password, server, and account type are required' });
+    if (!account_number || !password || !server || !provider) {
+      return res.status(400).json({ error: 'Account number, password, server, and provider are required' });
     }
 
-    // Validate account type
-    if (!validateAccountType(account_type)) {
-      return res.status(400).json({ error: 'Invalid account type. Must be one of: FTMO, Forex, Nasdaq, S&P500, XM, XM-GOLD, XM-NASDAQ' });
+    // Validate provider
+    if (!validateProvider(provider)) {
+      return res.status(400).json({ error: 'Invalid provider. Must be one of: ftmo, forex, xm' });
     }
 
-    // Validate phase (optional, defaults to 'challenge')
-    const accountPhase = phase || 'challenge';
-    if (!validatePhase(accountPhase)) {
-      return res.status(400).json({ error: 'Invalid phase. Must be one of: challenge, verification, account' });
+    // Validate account type (optional, defaults to 'challenge')
+    const accountTypeValue = account_type ? account_type.toLowerCase() : 'challenge';
+    if (!validateAccountType(accountTypeValue)) {
+      return res.status(400).json({ error: 'Invalid account type. Must be one of: challenge, verification, account' });
+    }
+
+    // Validate base_balance (optional, defaults to 0)
+    const baseBalance = base_balance || 0;
+    if (typeof baseBalance !== 'number' || baseBalance < 0) {
+      return res.status(400).json({ error: 'Base balance must be a non-negative number' });
     }
 
     // Get existing accounts
@@ -355,8 +361,9 @@ app.post('/api/accounts', verifySession, verifyManagerOrAdmin, async (req, res) 
       account_number,
       password, // In production, consider encryption
       server,
-      account_type,
-      phase: accountPhase,
+      base_balance: baseBalance,
+      account_type: accountTypeValue,
+      provider: provider.toLowerCase(),
       status: 'active',
       balance: 0,
       equity: 0,
@@ -381,7 +388,7 @@ app.post('/api/accounts', verifySession, verifyManagerOrAdmin, async (req, res) 
 app.put('/api/accounts/:accountId', verifySession, verifyManagerOrAdmin, async (req, res) => {
   try {
     const { accountId } = req.params;
-    const { account_number, password, server, account_type, phase } = req.body;
+    const { account_number, password, server, base_balance, account_type, provider } = req.body;
 
     // Get existing accounts
     const accountsData = await redisClient.get('mt5_accounts');
@@ -393,14 +400,19 @@ app.put('/api/accounts/:accountId', verifySession, verifyManagerOrAdmin, async (
       return res.status(404).json({ error: 'Account not found' });
     }
 
-    // Validate account type if provided
-    if (account_type && !validateAccountType(account_type)) {
-      return res.status(400).json({ error: 'Invalid account type. Must be one of: FTMO, Forex, Nasdaq, S&P500, XM, XM-GOLD,XM-NASDAQ'});
+    // Validate provider if provided
+    if (provider && !validateProvider(provider)) {
+      return res.status(400).json({ error: 'Invalid provider. Must be one of: ftmo, forex, xm' });
     }
 
-    // Validate phase if provided
-    if (phase && !validatePhase(phase)) {
-      return res.status(400).json({ error: 'Invalid phase. Must be one of: challenge, verification, account' });
+    // Validate account type if provided
+    if (account_type && !validateAccountType(account_type)) {
+      return res.status(400).json({ error: 'Invalid account type. Must be one of: challenge, verification, account' });
+    }
+
+    // Validate base_balance if provided
+    if (base_balance !== undefined && (typeof base_balance !== 'number' || base_balance < 0)) {
+      return res.status(400).json({ error: 'Base balance must be a non-negative number' });
     }
 
     // Check if account number already exists (excluding current account)
@@ -413,8 +425,9 @@ app.put('/api/accounts/:accountId', verifySession, verifyManagerOrAdmin, async (
     if (account_number) account.account_number = account_number;
     if (password) account.password = password;
     if (server) account.server = server;
-    if (account_type) account.account_type = account_type;
-    if (phase) account.phase = phase;
+    if (base_balance !== undefined) account.base_balance = base_balance;
+    if (account_type) account.account_type = account_type.toLowerCase();
+    if (provider) account.provider = provider.toLowerCase();
 
     account.updated_at = new Date().toISOString();
     account.updated_by = req.user.username;

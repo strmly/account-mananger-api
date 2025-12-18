@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "clean:accounts": "node redis_debug.js --clean",
+    "debug:redis": "node redis_debug.js",
     "test": "NODE_ENV=test jest --verbose --detectOpenHandles",
     "test:watch": "NODE_ENV=test jest --watch --verbose",
     "test:coverage": "NODE_ENV=test jest --coverage --verbose",

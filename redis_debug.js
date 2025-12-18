@@ -81,17 +81,101 @@ process.on('unhandledRejection', (error) => {
     process.exit(1);
 });
 
+async function cleanAccounts() {
+    console.log('🧹 Cleaning up accounts in Redis...\n');
+    
+    const redisClient = redis.createClient({
+        socket: {
+            host: 'redis-11451.c9.us-east-1-4.ec2.redns.redis-cloud.com',
+            port: 11451,
+        },
+        username: 'default',
+        password: 'rmNYR7f7baKHoDDQZfs0XuGLSBli1sxd',
+        database: 0
+    });
+
+    try {
+        await redisClient.connect();
+        console.log('✅ Connected to Redis Cloud');
+        
+        // Get existing accounts
+        const accountsData = await redisClient.get('mt5_accounts');
+        
+        if (!accountsData) {
+            console.log('ℹ️  No accounts found in Redis');
+            return;
+        }
+        
+        const accounts = JSON.parse(accountsData);
+        console.log(`📊 Total accounts before cleanup: ${accounts.length}\n`);
+        
+        // Filter accounts: keep only those with provider field AND provider is "ftmo" or "xm"
+        const validAccounts = accounts.filter(account => {
+            const hasProvider = account.hasOwnProperty('provider');
+            const validProvider = hasProvider && (account.provider === 'ftmo' || account.provider === 'xm');
+            
+            if (!hasProvider) {
+                console.log(`❌ Removing account ${account.account_number} - No provider field`);
+                return false;
+            }
+            
+            if (!validProvider) {
+                console.log(`❌ Removing account ${account.account_number} - Invalid provider: "${account.provider}"`);
+                return false;
+            }
+            
+            console.log(`✅ Keeping account ${account.account_number} - Provider: "${account.provider}"`);
+            return true;
+        });
+        
+        console.log(`\n📊 Total accounts after cleanup: ${validAccounts.length}`);
+        console.log(`🗑️  Removed ${accounts.length - validAccounts.length} accounts`);
+        
+        // Save cleaned accounts back to Redis
+        await redisClient.set('mt5_accounts', JSON.stringify(validAccounts));
+        console.log('\n✅ Accounts cleaned successfully!');
+        
+        // Display remaining accounts
+        if (validAccounts.length > 0) {
+            console.log('\n📋 Remaining accounts:');
+            validAccounts.forEach(acc => {
+                console.log(`   - Account: ${acc.account_number}, Provider: ${acc.provider}, Type: ${acc.account_type || 'N/A'}, Balance: ${acc.base_balance || 0}`);
+            });
+        } else {
+            console.log('\n⚠️  No accounts remaining after cleanup');
+        }
+        
+    } catch (error) {
+        console.error('❌ Error:', error.message);
+        console.error('Stack trace:', error.stack);
+        throw error;
+    } finally {
+        try {
+            await redisClient.quit();
+            console.log('\n🔌 Redis connection closed');
+        } catch (error) {
+            console.error('Error closing connection:', error.message);
+        }
+    }
+}
+
 // Run the debug function
 if (require.main === module) {
-    debugRedisConnection()
+    const args = process.argv.slice(2);
+    const shouldClean = args.includes('--clean');
+    
+    const runFunction = shouldClean ? cleanAccounts : debugRedisConnection;
+    const actionName = shouldClean ? 'Cleanup' : 'Debug';
+    
+    runFunction()
         .then(() => {
-            console.log('✅ Debug complete');
+            console.log(`✅ ${actionName} complete`);
             process.exit(0);
         })
         .catch((error) => {
-            console.error('Debug failed:', error);
+            console.error(`${actionName} failed:`, error);
             process.exit(1);
         });
 }
 
-module.exports = { debugRedisConnection };
+module.exports = { debugRedisConnection, cleanAccounts };
